@@ -39,6 +39,7 @@ class Redactor:
         privacy_filter: "PrivacyFilter | None" = None,
         user_name: str | None = None,
         home_dir: Path | None = None,
+        private_domains: list[str] | None = None,
     ) -> None:
         self.counts: collections.Counter[str] = collections.Counter()
         self.maps: dict[str, dict[str, str]] = collections.defaultdict(dict)
@@ -48,6 +49,11 @@ class Redactor:
         user = re.escape(self.user_name)
         home = re.escape(str(self.home_dir))
         encoded_home = "--" + re.escape(str(self.home_dir).strip("/").replace("/", "-"))
+        domain_pattern = None
+        if private_domains:
+            domain_pattern = r"(?i)\b(?:[A-Za-z0-9-]+\.)*(?:" + "|".join(
+                re.escape(domain) for domain in private_domains
+            ) + r")\b"
         self.patterns: list[tuple[str, re.Pattern[str], str | None]] = [
             (
                 "private_key",
@@ -75,6 +81,7 @@ class Redactor:
                 r"\1[SECRET:ENV_VALUE]",
             ),
             ("openai_key", re.compile(r"\bsk-(?:proj-|svcacct-)?[A-Za-z0-9_-]{20,}\b"), "[SECRET:OPENAI_API_KEY]"),
+            ("short_sk_key", re.compile(r"\bsk-[A-Za-z0-9_-]{6,}\b"), "[SECRET:API_KEY_FIELD]"),
             ("anthropic_key", re.compile(r"\bsk-ant-[A-Za-z0-9_-]{20,}\b"), "[SECRET:ANTHROPIC_API_KEY]"),
             ("github_token", re.compile(r"\bgh[pousr]_[A-Za-z0-9_]{20,}\b"), "[SECRET:GITHUB_TOKEN]"),
             ("huggingface_token", re.compile(r"\bhf_[A-Za-z0-9]{20,}\b"), "[SECRET:HUGGINGFACE_TOKEN]"),
@@ -91,13 +98,30 @@ class Redactor:
                 re.compile(r"\b(?:postgres(?:ql)?|mysql|mongodb(?:\+srv)?|redis|amqp)://[^\s'\"<>`]+", re.I),
                 "[SECRET:DATABASE_URL]",
             ),
+            (
+                "api_key_json_field",
+                re.compile(r'(?i)((?:\\?")api[_-]?key(?:\\?")\s*:\s*(?:\\?"))(?!\[SECRET:|\{env:)[^\\"]+((?:\\?"))'),
+                r"\1[SECRET:API_KEY_FIELD]\2",
+            ),
+            (
+                "api_key_assignment",
+                re.compile(r"(?i)\b(api[_-]?key|apikey)\s*=\s*(['\"]?)(?!\[SECRET:|\{env:)[^\s'\"\\]{3,}\2"),
+                r"\1=[SECRET:API_KEY_FIELD]",
+            ),
             ("email", re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b"), None),
             ("user_at_host", re.compile(user + r"@[A-Za-z0-9._-]+\b"), "[PII:USER_AT_HOST]"),
             ("user_at_literal", re.compile(user + r"@"), "[PII:USER_AT]"),
             ("ipv4", re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b"), "[PII:IP_ADDRESS]"),
+            *(
+                [("private_domain", re.compile(domain_pattern), "[PRIVATE_DOMAIN]")]
+                if domain_pattern
+                else []
+            ),
+            ("private_user_name", re.compile(r"(?i)\b" + user + r"\b"), "[PRIVATE_USER]"),
             ("encoded_home_path", re.compile(encoded_home + r"(?:-[A-Za-z0-9_.]+)*--"), None),
             ("encoded_home_path_literal", re.compile(encoded_home), "[ENCODED_HOME_PATH]"),
             ("redacted_literal", re.compile(r"\bREDACTED\b"), "[OMITTED]"),
+            ("generic_home_path", re.compile(r"(?:/home|home)/[A-Za-z0-9._-]+(?:/[^\s'\"<>`)}\]]*)?"), None),
             ("home_path", re.compile(r"(?:" + home + r"|~)(?:/[^\s'\"<>`)}\]]*)?"), None),
             ("mac_home_path", re.compile(r"/Users/[A-Za-z0-9._-]+(?:/[^\s'\"<>`)}\]]*)?"), None),
             (
@@ -458,6 +482,7 @@ def main() -> int:
     parser.add_argument("--out", type=Path, default=DEFAULT_OUT)
     parser.add_argument("--user-name", default=os.environ.get("USER") or Path.home().name)
     parser.add_argument("--home-dir", type=Path, default=Path.home())
+    parser.add_argument("--private-domain", action="append", default=[], help="Private domain to redact, including subdomains. Can be repeated.")
     parser.add_argument("--force", action="store_true", help="Replace an existing output directory.")
     parser.add_argument("--privacy-filter", action="store_true", help="Run openai/privacy-filter on short string fields.")
     parser.add_argument("--privacy-filter-threshold", type=float, default=0.65)
@@ -486,6 +511,7 @@ def main() -> int:
         privacy_filter=privacy_filter,
         user_name=args.user_name,
         home_dir=args.home_dir,
+        private_domains=args.private_domain,
     )
     report: dict[str, Any] = {
         "format": "raw-preserving-redacted-agent-traces-v1",

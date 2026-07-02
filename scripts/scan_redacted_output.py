@@ -6,15 +6,18 @@ import re
 from pathlib import Path
 
 
-def build_patterns(user_name: str, home_dir: Path) -> dict[str, re.Pattern[str]]:
+def build_patterns(user_name: str, home_dir: Path, private_domains: list[str]) -> dict[str, re.Pattern[str]]:
     user = re.escape(user_name)
     home = re.escape(str(home_dir))
     encoded_home = "--" + re.escape(str(home_dir).strip("/").replace("/", "-"))
-    return {
+    patterns = {
     "home_path_content": re.compile(r"(?:" + home + r"|~" + user + r")"),
+    "generic_home_path_content": re.compile(r"(?:/home|home)/(?!\[)[A-Za-z0-9._-]+"),
     "encoded_home_path_content": re.compile(encoded_home),
     "user_at_host": re.compile(user + r"@"),
+    "private_user_name": re.compile(r"(?i)\b" + user + r"\b"),
     "openai_key": re.compile(r"\bsk-(?:proj-|svcacct-)?[A-Za-z0-9_-]{20,}\b"),
+    "short_sk_key": re.compile(r"\bsk-[A-Za-z0-9_-]{6,}\b"),
     "anthropic_key": re.compile(r"\bsk-ant-[A-Za-z0-9_-]{20,}\b"),
     "github_token": re.compile(r"\bgh[pousr]_[A-Za-z0-9_]{20,}\b"),
     "hf_token": re.compile(r"\bhf_[A-Za-z0-9]{20,}\b"),
@@ -23,7 +26,13 @@ def build_patterns(user_name: str, home_dir: Path) -> dict[str, re.Pattern[str]]
     "private_key": re.compile(r"BEGIN [A-Z0-9 ]*PRIVATE KEY"),
     "long_bearer": re.compile(r"Bearer (?!\[SECRET:)[A-Za-z0-9._~+/=-]{20,}"),
     "email": re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b"),
+    "api_key_field_value": re.compile(r'(?i)(?:api[_-]?key|apikey|apiKey)\s*["\']?\s*[:=]\s*["\']?(?!\[SECRET:|\{env:|\$|undefined|null|string|boolean|number)[^\s"\',}]{3,}'),
     }
+    if private_domains:
+        patterns["private_domain"] = re.compile(
+            r"(?i)\b(?:[A-Za-z0-9-]+\.)*(?:" + "|".join(re.escape(d) for d in private_domains) + r")\b"
+        )
+    return patterns
 
 
 def main() -> int:
@@ -31,11 +40,12 @@ def main() -> int:
     parser.add_argument("--root", type=Path, default=Path.home() / "redacted-agent-traces")
     parser.add_argument("--user-name", default=os.environ.get("USER") or Path.home().name)
     parser.add_argument("--home-dir", type=Path, default=Path.home())
+    parser.add_argument("--private-domain", action="append", default=[], help="Private domain to scan for. Can be repeated.")
     args = parser.parse_args()
 
     failed = False
     results = {}
-    for name, pattern in build_patterns(args.user_name, args.home_dir).items():
+    for name, pattern in build_patterns(args.user_name, args.home_dir, args.private_domain).items():
         count = 0
         files = 0
         examples = []

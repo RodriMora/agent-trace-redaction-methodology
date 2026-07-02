@@ -43,6 +43,7 @@ python scripts/export_redacted_traces.py \
   --root "$HOME" \
   --out "$HOME/redacted-agent-traces" \
   --force \
+  --private-domain example.com \
   --privacy-filter \
   --gitleaks-fix \
   --gitleaks
@@ -51,7 +52,9 @@ python scripts/export_redacted_traces.py \
 Run the independent high-risk regex scan:
 
 ```bash
-python scripts/scan_redacted_output.py
+python scripts/scan_redacted_output.py \
+  --root "$HOME/redacted-agent-traces" \
+  --private-domain example.com
 ```
 
 ## Practical Notes
@@ -99,4 +102,3 @@ redacted-agent-traces/
 ## Disclaimer
 
 No automated redaction pipeline is a guarantee. Use this as a layered methodology and perform manual review before releasing traces publicly.
-
