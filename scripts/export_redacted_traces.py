@@ -40,6 +40,7 @@ class Redactor:
         user_name: str | None = None,
         home_dir: Path | None = None,
         private_domains: list[str] | None = None,
+        private_terms: list[str] | None = None,
     ) -> None:
         self.counts: collections.Counter[str] = collections.Counter()
         self.maps: dict[str, dict[str, str]] = collections.defaultdict(dict)
@@ -54,6 +55,9 @@ class Redactor:
             domain_pattern = r"(?i)\b(?:[A-Za-z0-9-]+\.)*(?:" + "|".join(
                 re.escape(domain) for domain in private_domains
             ) + r")\b"
+        term_pattern = None
+        if private_terms:
+            term_pattern = r"(?i)\b(?:" + "|".join(re.escape(term) for term in private_terms) + r")\b"
         self.patterns: list[tuple[str, re.Pattern[str], str | None]] = [
             (
                 "private_key",
@@ -88,6 +92,11 @@ class Redactor:
             ("google_api_key", re.compile(r"\bAIza[0-9A-Za-z_-]{30,}\b"), "[SECRET:GOOGLE_API_KEY]"),
             ("aws_access_key", re.compile(r"\b(?:AKIA|ASIA|ABIA|ACCA)[A-Z0-9]{16}\b"), "[SECRET:AWS_ACCESS_KEY]"),
             ("jwt", re.compile(r"\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b"), "[SECRET:JWT]"),
+            ("mac_address", re.compile(r"\b[0-9A-Fa-f]{2}[:-][0-9A-Fa-f]{2}(?:[:-][0-9A-Fa-f]{2}){4}\b"), "[HW:MAC_ADDRESS]"),
+            ("bluetooth_path", re.compile(r"/org/bluez/[^\s\"<>`)}\]]+|dev_[0-9A-Fa-f]{2}(?:_[0-9A-Fa-f]{2}){5}"), "[HW:BLUETOOTH_PATH]"),
+            ("airpods_pro", re.compile(r"(?i)\bAirPods\s+Pro\b"), "[HW:BLUETOOTH_DEVICE]"),
+            ("scarlett_solo", re.compile(r"(?i)\bScarlett\s+Solo\b"), "[HW:AUDIO_DEVICE]"),
+            ("focusrite_device", re.compile(r"(?i)\bFocusrite(?:[_\s-]+[A-Za-z0-9]+)*\b"), "[HW:AUDIO_DEVICE]"),
             (
                 "url_basic_auth",
                 re.compile(r"\b([a-z][a-z0-9+.-]*://)[^/\s:@]+:[^/\s:@]+@"),
@@ -112,14 +121,19 @@ class Redactor:
             ("user_at_host", re.compile(user + r"@[A-Za-z0-9._-]+\b"), "[PII:USER_AT_HOST]"),
             ("user_at_literal", re.compile(user + r"@"), "[PII:USER_AT]"),
             ("ipv4", re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b"), "[PII:IP_ADDRESS]"),
+            ("encoded_home_path", re.compile(encoded_home + r"(?:-[A-Za-z0-9_.]+)*--"), None),
+            ("encoded_home_path_literal", re.compile(encoded_home), "[ENCODED_HOME_PATH]"),
             *(
                 [("private_domain", re.compile(domain_pattern), "[PRIVATE_DOMAIN]")]
                 if domain_pattern
                 else []
             ),
+            *(
+                [("private_term", re.compile(term_pattern), "[PRIVATE_TERM]")]
+                if term_pattern
+                else []
+            ),
             ("private_user_name", re.compile(r"(?i)\b" + user + r"\b"), "[PRIVATE_USER]"),
-            ("encoded_home_path", re.compile(encoded_home + r"(?:-[A-Za-z0-9_.]+)*--"), None),
-            ("encoded_home_path_literal", re.compile(encoded_home), "[ENCODED_HOME_PATH]"),
             ("redacted_literal", re.compile(r"\bREDACTED\b"), "[OMITTED]"),
             ("generic_home_path", re.compile(r"(?:/home|home)/[A-Za-z0-9._-]+(?:/[^\s'\"<>`)}\]]*)?"), None),
             ("home_path", re.compile(r"(?:" + home + r"|~)(?:/[^\s'\"<>`)}\]]*)?"), None),
@@ -165,7 +179,10 @@ class Redactor:
         if isinstance(value, list):
             return [self.redact(v) for v in value]
         if isinstance(value, dict):
-            return {k: self.redact(v) for k, v in value.items()}
+            return {
+                self.redact_string(k) if isinstance(k, str) else k: self.redact(v)
+                for k, v in value.items()
+            }
         return value
 
 
@@ -347,15 +364,51 @@ def copy_manifest_file(src: Path, dst: Path, redactor: Redactor) -> None:
 
 def final_safety_pass(root: Path, redactor: Redactor) -> dict[str, int]:
     stats = {"files_scanned": 0, "files_changed": 0}
+    privacy_filter = redactor.privacy_filter
+    redactor.privacy_filter = None
     for path in root.rglob("*"):
         if not path.is_file():
             continue
         stats["files_scanned"] += 1
+        if path.suffix == ".jsonl":
+            changed = False
+            out_lines = []
+            for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
+                if not line.strip():
+                    out_lines.append(line)
+                    continue
+                try:
+                    obj = json.loads(line)
+                except json.JSONDecodeError:
+                    redacted = redactor.redact_string(line)
+                    changed = changed or redacted != line
+                    out_lines.append(redacted)
+                    continue
+                redacted_obj = redactor.redact(obj)
+                changed = changed or redacted_obj != obj
+                out_lines.append(json.dumps(redacted_obj, ensure_ascii=False, separators=(",", ":")))
+            if changed:
+                path.write_text("\n".join(out_lines) + "\n", encoding="utf-8")
+                stats["files_changed"] += 1
+            continue
+        if path.suffix == ".json":
+            text = path.read_text(encoding="utf-8", errors="replace")
+            try:
+                obj = json.loads(text)
+            except json.JSONDecodeError:
+                obj = None
+            if obj is not None:
+                redacted_obj = redactor.redact(obj)
+                if redacted_obj != obj:
+                    path.write_text(json.dumps(redacted_obj, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+                    stats["files_changed"] += 1
+                continue
         text = path.read_text(encoding="utf-8", errors="replace")
         redacted = redactor.redact_string(text)
         if redacted != text:
             path.write_text(redacted, encoding="utf-8")
             stats["files_changed"] += 1
+    redactor.privacy_filter = privacy_filter
     return stats
 
 
@@ -483,6 +536,7 @@ def main() -> int:
     parser.add_argument("--user-name", default=os.environ.get("USER") or Path.home().name)
     parser.add_argument("--home-dir", type=Path, default=Path.home())
     parser.add_argument("--private-domain", action="append", default=[], help="Private domain to redact, including subdomains. Can be repeated.")
+    parser.add_argument("--private-term", action="append", default=[], help="Private person/location/project/device term to redact. Can be repeated.")
     parser.add_argument("--force", action="store_true", help="Replace an existing output directory.")
     parser.add_argument("--privacy-filter", action="store_true", help="Run openai/privacy-filter on short string fields.")
     parser.add_argument("--privacy-filter-threshold", type=float, default=0.65)
@@ -512,6 +566,7 @@ def main() -> int:
         user_name=args.user_name,
         home_dir=args.home_dir,
         private_domains=args.private_domain,
+        private_terms=args.private_term,
     )
     report: dict[str, Any] = {
         "format": "raw-preserving-redacted-agent-traces-v1",

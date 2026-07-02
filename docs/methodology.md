@@ -53,3 +53,8 @@ The included scanner checks for common high-risk leftovers:
 
 This scan is intentionally narrow and should be complemented by Gitleaks and manual review.
 
+## 6. Optional Local LLM Review
+
+`scripts/llm_residue_redact.py` can call a local OpenAI-compatible vLLM server as a final privacy reviewer. It sends only candidate chunks selected by regexes and optional `--private-term` values. The model returns exact substrings to redact; the script then applies those replacements inside parsed JSON/JSONL string values and object keys.
+
+This avoids sending traces to a hosted API and avoids free-form rewriting that could break raw trace structure.

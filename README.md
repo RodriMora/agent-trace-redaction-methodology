@@ -44,6 +44,7 @@ python scripts/export_redacted_traces.py \
   --out "$HOME/redacted-agent-traces" \
   --force \
   --private-domain example.com \
+  --private-term "Private Project Name" \
   --privacy-filter \
   --gitleaks-fix \
   --gitleaks
@@ -56,6 +57,18 @@ python scripts/scan_redacted_output.py \
   --root "$HOME/redacted-agent-traces" \
   --private-domain example.com
 ```
+
+Optional local LLM final pass, using an OpenAI-compatible vLLM server:
+
+```bash
+python scripts/llm_residue_redact.py \
+  --root "$HOME/redacted-agent-traces" \
+  --base-url http://192.168.10.115:5000 \
+  --workers 16 \
+  --private-term "Private Project Name"
+```
+
+The LLM pass asks the local model for exact substrings to redact and applies replacements inside parsed JSON/JSONL string values and keys, preserving JSON validity.
 
 ## Practical Notes
 
@@ -70,9 +83,10 @@ For large corpora, the recommended sequence is:
 1. Run rule-based redaction.
 2. Run selective Privacy Filter.
 3. Run Gitleaks fix.
-4. Run final Gitleaks scan.
-5. Run independent regex scan.
-6. Manually inspect a random sample and any high-risk sessions before publishing.
+4. Run the optional local LLM exact-substring pass.
+5. Run final Gitleaks scan.
+6. Run independent regex scan.
+7. Manually inspect a random sample and any high-risk sessions before publishing.
 
 ## Safety Model
 

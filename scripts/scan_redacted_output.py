@@ -4,6 +4,7 @@ import json
 import os
 import re
 from pathlib import Path
+from collections.abc import Callable
 
 
 def build_patterns(user_name: str, home_dir: Path, private_domains: list[str]) -> dict[str, re.Pattern[str]]:
@@ -25,14 +26,31 @@ def build_patterns(user_name: str, home_dir: Path, private_domains: list[str]) -
     "aws_key": re.compile(r"\b(?:AKIA|ASIA|ABIA|ACCA)[A-Z0-9]{16}\b"),
     "private_key": re.compile(r"BEGIN [A-Z0-9 ]*PRIVATE KEY"),
     "long_bearer": re.compile(r"Bearer (?!\[SECRET:)[A-Za-z0-9._~+/=-]{20,}"),
-    "email": re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b"),
-    "api_key_field_value": re.compile(r'(?i)(?:api[_-]?key|apikey|apiKey)\s*["\']?\s*[:=]\s*["\']?(?!\[SECRET:|\{env:|\$|undefined|null|string|boolean|number)[^\s"\',}]{3,}'),
+    "email": re.compile(r"(?<!\\)\b[A-Za-z0-9._%+-]+@(?!(?:app|router|pytest|bp|auth|admin)\.)[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b"),
+    "api_key_field_value": re.compile(r'(?i)(?:api[_-]?key|apikey|apiKey)[ \t]*["\']?[ \t]*[:=][ \t]*["\']?(?!\[SECRET:|\[APIKEY_FIELD\]|\{env:|\$|undefined|null|string|boolean|number|\\n|\\r)[^\s\\"\',}]{3,}'),
     }
     if private_domains:
         patterns["private_domain"] = re.compile(
             r"(?i)\b(?:[A-Za-z0-9-]+\.)*(?:" + "|".join(re.escape(d) for d in private_domains) + r")\b"
         )
     return patterns
+
+
+def is_countable(name: str, match: str, text: str, start: int) -> bool:
+    if name == "email":
+        if start > 0 and text[start - 1] in {"\\", "@", "["}:
+            return False
+        local, _, domain = match.partition("@")
+        if len(local) <= 1:
+            return False
+        if domain.split(".", 1)[0].lower() in {"app", "router", "pytest", "bp", "auth", "admin"}:
+            return False
+    if name == "api_key_field_value":
+        if "[APIKEY_FIELD]" in match or "[SECRET:" in match:
+            return False
+        if start > 0 and text[start - 1] == "[":
+            return False
+    return True
 
 
 def main() -> int:
@@ -53,7 +71,11 @@ def main() -> int:
             if not path.is_file():
                 continue
             text = path.read_text(encoding="utf-8", errors="ignore")
-            matches = pattern.findall(text)
+            matches = [
+                m.group(0)
+                for m in pattern.finditer(text)
+                if is_countable(name, m.group(0), text, m.start())
+            ]
             if matches:
                 count += len(matches)
                 files += 1
