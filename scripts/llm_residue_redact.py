@@ -9,13 +9,15 @@ from pathlib import Path
 from typing import Any
 
 
-DEFAULT_BASE_URL = "http://192.168.10.115:5000"
+DEFAULT_BASE_URL = "http://localhost:8000"
 
 DEFAULT_CANDIDATE_PATTERNS = [
     r"\b[0-9A-Fa-f]{2}[:-][0-9A-Fa-f]{2}(?:[:-][0-9A-Fa-f]{2}){4}\b",
     r"/org/bluez/[^\s\"<>`)}\]]+|dev_[0-9A-Fa-f]{2}(?:_[0-9A-Fa-f]{2}){5}",
     r"(?i:\b(serial|s/n|device id|hardware id|bluetooth|bssid|mac address)\b)",
     r"(?i:\b(location|address|client|customer|project|meeting|transcript|recording)\b)",
+    r"\bhttps?://[^\s'\"<>`)}\]]+",
+    r"(?<![A-Za-z0-9_-])--(?=[A-Za-z0-9_.-]*[A-Za-z0-9])[A-Za-z0-9_.-]{3,}--(?![A-Za-z0-9_-])",
 ]
 
 SYSTEM_PROMPT = """You are a privacy redaction reviewer for coding-agent traces.
@@ -40,6 +42,11 @@ Return:
 """
 
 
+def api_base(base_url: str) -> str:
+    base = base_url.rstrip("/")
+    return base if base.endswith("/v1") else base + "/v1"
+
+
 def http_json(url: str, payload: dict[str, Any] | None = None, timeout: int = 60) -> dict[str, Any]:
     data = None if payload is None else json.dumps(payload).encode("utf-8")
     req = urllib.request.Request(url, data=data, headers={"content-type": "application/json"})
@@ -48,7 +55,7 @@ def http_json(url: str, payload: dict[str, Any] | None = None, timeout: int = 60
 
 
 def discover_model(base_url: str) -> str:
-    data = http_json(base_url.rstrip("/") + "/v1/models", timeout=15)
+    data = http_json(api_base(base_url) + "/models", timeout=15)
     models = data.get("data") or []
     if not models:
         raise SystemExit("No models returned by /v1/models")
@@ -85,7 +92,7 @@ def ask_model(base_url: str, model: str, chunk: str, timeout: int) -> list[dict[
         "max_tokens": 1024,
     }
     try:
-        data = http_json(base_url.rstrip("/") + "/v1/chat/completions", payload, timeout=timeout)
+        data = http_json(api_base(base_url) + "/chat/completions", payload, timeout=timeout)
     except (urllib.error.URLError, TimeoutError):
         return []
     content = data.get("choices", [{}])[0].get("message", {}).get("content") or ""
