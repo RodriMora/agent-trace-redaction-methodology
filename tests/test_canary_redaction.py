@@ -24,7 +24,7 @@ class CanaryRedactionTest(unittest.TestCase):
             write_jsonl(root / ".codex" / "history.jsonl", [
                 {
                     "type": "history",
-                    "text": "Alice used sk-proj-abcdefghijklmnopqrstuvwxyz at alice@example.test from /home/alice/private and https://private.example.test/path",
+                    "text": "Alice used sk-proj-abcdefghijklmnopqrstuvwxyz at alice@example.test from /home/alice/private and https://private.example.test/path and home.alicelabs.example",
                     "encrypted_content": "gAAAAABabcdefghijklmnopqrstuvwxyz0123456789",
                     "thinkingSignature": "{\"encrypted_content\":\"gAAAAABabcdefghijklmnopqrstuvwxyz0123456789\"}",
                     "public_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMM alice@host",
@@ -34,7 +34,7 @@ class CanaryRedactionTest(unittest.TestCase):
                 {
                     "type": "message",
                     "payload": {
-                        "content": "Call me +1 415 555 1212, address 123 Main Street, GPS com.apple.quicktime.location.ISO6709: +40.4064-003.6548+654.064/, share https://opncd.ai/share/abc123XYZ, cwd --home-alice-secret-project--",
+                        "content": "Call me +1 415 555 1212, address 123 Main Street, GPS com.apple.quicktime.location.ISO6709: +40.4064-003.6548+654.064/, bcrypt $2b$12$o3YK2r/0C4F3EbRlTu95Q.30zpJsol1Nf.vGwxMpHTuaXUtGlxhDy, share https://opncd.ai/share/abc123XYZ, cwd --home-alice-secret-project--",
                         "apiKey": "not-a-real-secret-but-sensitive-field",
                         "share_url": "https://opncd.ai/share/abc123XYZ",
                     },

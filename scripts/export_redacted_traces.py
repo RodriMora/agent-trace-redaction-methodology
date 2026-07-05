@@ -91,6 +91,35 @@ SENSITIVE_FIELD_SUBSTRINGS = (
     "thinkingsignature",
 )
 
+PRIVATE_TERM_DENYLIST = {
+    "admin",
+    "agent",
+    "assets",
+    "benchmark",
+    "checker",
+    "cloud",
+    "codex",
+    "dev",
+    "downloads",
+    "engine",
+    "github.com",
+    "home",
+    "localhost",
+    "proxy",
+    "redacted",
+    "redaction",
+    "setup",
+    "sync",
+    "test",
+    "throughput",
+    "trace",
+    "traces",
+    "user",
+    "videos",
+    "work",
+}
+
+
 DEFAULT_PUBLIC_URL_ALLOWLIST = {
     "github.com",
     "raw.githubusercontent.com",
@@ -119,22 +148,56 @@ def run_text(cmd: list[str]) -> str:
         return ""
 
 
+def add_private_term(terms: set[str], value: str) -> None:
+    clean = value.strip().strip("-_.")
+    if len(clean) >= 3 and clean.lower() not in PRIVATE_TERM_DENYLIST and clean.lower() != "root":
+        terms.add(clean)
+
+
 def discover_private_terms(root: Path, user_name: str, home_dir: Path) -> list[str]:
     terms: set[str] = set()
     for value in {user_name, home_dir.name, os.environ.get("USER", ""), os.environ.get("LOGNAME", "")}:
-        if value and len(value) >= 3:
-            terms.add(value)
+        if value:
+            add_private_term(terms, value)
     hostname = socket.gethostname().split(".", 1)[0]
-    if hostname and len(hostname) >= 3 and hostname not in {"localhost"}:
-        terms.add(hostname)
+    if hostname and hostname not in {"localhost"}:
+        add_private_term(terms, hostname)
     git_name = run_text(["git", "config", "--global", "user.name"])
-    if git_name and len(git_name) >= 3:
-        terms.add(git_name)
+    if git_name:
+        add_private_term(terms, git_name)
+        name_parts = [part for part in re.split(r"[^A-Za-z0-9]+", git_name) if len(part) >= 3]
+        for part in name_parts:
+            add_private_term(terms, part)
+        if len(name_parts) >= 2:
+            add_private_term(terms, "".join(name_parts))
     git_email = run_text(["git", "config", "--global", "user.email"])
     if git_email:
-        local = git_email.split("@", 1)[0]
-        if len(local) >= 3:
-            terms.add(local)
+        local, _, domain = git_email.partition("@")
+        add_private_term(terms, local)
+        if domain and any(term.lower() in domain.lower() for term in terms if len(term) >= 4):
+            add_private_term(terms, domain)
+    tz = os.environ.get("TZ") or ""
+    timezone_file = Path("/etc/timezone")
+    if not tz and timezone_file.exists():
+        tz = timezone_file.read_text(encoding="utf-8", errors="ignore").strip()
+    localtime = Path("/etc/localtime")
+    if not tz and localtime.exists():
+        try:
+            resolved = localtime.resolve()
+            if "zoneinfo" in resolved.parts:
+                tz = "/".join(resolved.parts[resolved.parts.index("zoneinfo") + 1:])
+        except Exception:
+            pass
+    if "/" in tz:
+        add_private_term(terms, tz.rsplit("/", 1)[1].replace("_", " "))
+    pi_sessions = root / ".pi" / "agent" / "sessions"
+    if pi_sessions.exists():
+        for child in pi_sessions.iterdir():
+            if not child.is_dir():
+                continue
+            for token in re.split(r"[^A-Za-z0-9]+", child.name.strip("-")):
+                if len(token) >= 4:
+                    add_private_term(terms, token)
     ssh_config = root / ".ssh" / "config"
     if ssh_config.exists():
         for line in ssh_config.read_text(encoding="utf-8", errors="ignore").splitlines():
@@ -142,8 +205,8 @@ def discover_private_terms(root: Path, user_name: str, home_dir: Path) -> list[s
             if not stripped.lower().startswith("host "):
                 continue
             for alias in stripped.split()[1:]:
-                if "*" not in alias and "?" not in alias and len(alias) >= 3:
-                    terms.add(alias)
+                if "*" not in alias and "?" not in alias:
+                    add_private_term(terms, alias)
     return sorted(terms, key=lambda item: (-len(item), item.lower()))
 
 
@@ -166,6 +229,11 @@ class Redactor:
         self.allow_public_urls = allow_public_urls
         self.allowed_domains = set(DEFAULT_PUBLIC_URL_ALLOWLIST if allow_public_urls else set())
         self.allowed_domains.update(domain.lower().lstrip(".") for domain in (allowed_domains or []))
+        merged_private_terms = list(private_terms or [])
+        for value in {self.user_name, self.home_dir.name}:
+            if value and value not in merged_private_terms:
+                merged_private_terms.append(value)
+        private_terms = merged_private_terms
         user = re.escape(self.user_name)
         home = re.escape(str(self.home_dir))
         encoded_home = "--" + re.escape(str(self.home_dir).strip("/").replace("/", "-"))
@@ -175,8 +243,21 @@ class Redactor:
                 re.escape(domain) for domain in private_domains
             ) + r")\b"
         term_pattern = None
+        compound_term_pattern = None
+        term_domain_pattern = None
         if private_terms:
-            term_pattern = r"(?i)(?<![A-Za-z0-9_])(?:" + "|".join(re.escape(term) for term in private_terms) + r")(?![A-Za-z0-9_])"
+            escaped_terms = [re.escape(term) for term in private_terms if len(term) >= 3]
+            identity_seed = {self.user_name.lower(), self.home_dir.name.lower()}
+            embedded_terms = [
+                re.escape(term)
+                for term in private_terms
+                if len(term) >= 4 and any(seed and (seed in term.lower() or term.lower() in seed) for seed in identity_seed)
+            ]
+            if escaped_terms:
+                term_pattern = r"(?i)(?<![A-Za-z0-9_])(?:" + "|".join(escaped_terms) + r")(?![A-Za-z0-9_])"
+            if embedded_terms:
+                compound_term_pattern = r"(?i)\b[A-Za-z0-9_.-]*(?:" + "|".join(embedded_terms) + r")[A-Za-z0-9_.-]*\b"
+                term_domain_pattern = r"(?i)\b(?:[A-Za-z0-9-]+\.)*[A-Za-z0-9-]*(?:" + "|".join(embedded_terms) + r")[A-Za-z0-9-]*(?:\.[A-Za-z0-9-]+)+\b"
         self.patterns: list[tuple[str, re.Pattern[str], str | None]] = [
             (
                 "private_key",
@@ -230,6 +311,7 @@ class Redactor:
             ("google_api_key", re.compile(r"\bAIza[0-9A-Za-z_-]{30,}\b"), "[SECRET:GOOGLE_API_KEY]"),
             ("aws_access_key", re.compile(r"\b(?:AKIA|ASIA|ABIA|ACCA)[A-Z0-9]{16}\b"), "[SECRET:AWS_ACCESS_KEY]"),
             ("jwt", re.compile(r"\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b"), "[SECRET:JWT]"),
+            ("password_hash", re.compile(r"\$2[aby]\$\d{2}\$[./A-Za-z0-9]{53}|\$(?:argon2id|argon2i|argon2d|5|6)\$[^\s'\"\\]{20,}"), "[SECRET:PASSWORD_HASH]"),
             ("ssh_public_key", re.compile(r"\bssh-(?:rsa|ed25519)\s+[A-Za-z0-9+/=]{40,}(?:\s+[^\s'\"<>`]+)?"), "[SECRET:SSH_PUBLIC_KEY]"),
             ("iban", re.compile(r"\b[A-Z]{2}\d{2}[A-Z0-9]{11,30}\b"), "[PII:IBAN]"),
             (
@@ -299,8 +381,18 @@ class Redactor:
                 else []
             ),
             *(
+                [("private_term_domain", re.compile(term_domain_pattern), "[PRIVATE_DOMAIN]")]
+                if term_domain_pattern
+                else []
+            ),
+            *(
                 [("private_term", re.compile(term_pattern), "[PRIVATE_TERM]")]
                 if term_pattern
+                else []
+            ),
+            *(
+                [("private_term_compound", re.compile(compound_term_pattern), "[PRIVATE_TERM]")]
+                if compound_term_pattern
                 else []
             ),
             ("private_user_name", re.compile(r"(?i)\b" + user + r"\b"), "[PRIVATE_USER]"),

@@ -15,7 +15,7 @@ The default system should be useful without passing concrete names, URLs, paths,
 
 - Redact all URLs unless explicitly allowed with `--allow-public-urls` / `--allow-domain`.
 - Redact local paths, home directories, user-at-host prompts, SSH remotes, and Pi encoded cwd folders.
-- Auto-discover likely local identifiers from username, home directory, hostname, git config, and SSH config aliases.
+- Auto-discover likely local identifiers from username, home directory, hostname, git config name/email parts, local timezone city, Pi encoded session path components, and SSH config aliases.
 - Keep `--private-term` and `--private-domain` as optional hardening inputs, not required configuration.
 
 ## 3. Redact Deterministically First
@@ -24,14 +24,14 @@ The first pass recursively redacts all string fields and path components with ex
 
 - API keys and provider tokens
 - Bearer tokens and authorization headers
-- Private keys, SSH public keys, JWTs
+- Private keys, SSH public keys, JWTs, and password hashes
 - Database URLs and URL basic auth
 - Sensitive environment variable assignments
 - Emails, IPs/IPv6, MAC/Bluetooth IDs, SSH remotes
-- URLs and OpenCode share URLs
+- URLs, OpenCode share URLs, and private domains containing local identity terms
 - GPS coordinates, ISO6709/QuickTime location metadata, and lat/lon pairs
 - Local home paths, generic home paths, shell prompts, and Pi encoded folders
-- Contextual phone numbers, street-address-shaped content, and IBAN-like identifiers
+- Contextual phone numbers, street-address-shaped content, identity-like compounds, and IBAN-like identifiers
 
 Stable placeholders are used for repeated identifiers, such as `[HOME_PATH:0001:...]`, so structure remains analyzable without exposing the source value.
 
@@ -68,12 +68,12 @@ When `--gitleaks` is enabled, a final Gitleaks report is written outside the art
 The scanner checks both file contents and output path names for high-risk leftovers:
 
 - local home paths and Pi encoded folders
-- user-at-host shell prompts and configured username
+- user-at-host shell prompts, configured username, username-containing domains, and identity-like compounds
 - all URLs unless allowlisted
 - OpenCode share URLs
 - IPs, IPv6, MACs, Bluetooth paths
 - GPS/ISO6709 coordinates, lat/lon pairs, and street-address-shaped content
-- provider key prefixes, private keys, bearer tokens, SSH public keys
+- provider key prefixes, private keys, bearer tokens, SSH public keys, and password hashes
 - normal email addresses
 - unredacted API-key fields
 - unredacted opaque provider blobs

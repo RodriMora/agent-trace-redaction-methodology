@@ -34,6 +34,8 @@ def build_patterns(user_name: str, home_dir: Path, private_domains: list[str]) -
         "generic_pi_encoded_path": re.compile(r"(?<![A-Za-z0-9_-])--(?=[A-Za-z0-9_.-]*[A-Za-z0-9])[A-Za-z0-9_.-]{3,}--(?![A-Za-z0-9_-])"),
         "user_at_host": re.compile(user + r"@"),
         "private_user_name": re.compile(r"(?i)\b" + user + r"\b"),
+        "private_user_compound": re.compile(r"(?i)\b[A-Za-z0-9_.-]*" + user + r"[A-Za-z0-9_.-]*\b"),
+        "private_user_domain": re.compile(r"(?i)\b(?:[A-Za-z0-9-]+\.)*[A-Za-z0-9-]*" + user + r"[A-Za-z0-9-]*(?:\.[A-Za-z0-9-]+)+\b"),
         "opencode_share_url": re.compile(r"\bhttps?://(?:www\.)?opncd\.ai/share/[^\s'\"<>`)}\]]+", re.I),
         "url": re.compile(r"\bhttps?://[^\s'\"<>`)}\]]+", re.I),
         "private_rfc1918_url": re.compile(r"\bhttps?://(?:localhost|127\.0\.0\.1|10\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+|172\.(?:1[6-9]|2\d|3[0-1])\.\d+\.\d+)[^\s'\"<>`]*", re.I),
@@ -42,6 +44,7 @@ def build_patterns(user_name: str, home_dir: Path, private_domains: list[str]) -
         "mac_address": re.compile(r"\b[0-9A-Fa-f]{2}[:-][0-9A-Fa-f]{2}(?:[:-][0-9A-Fa-f]{2}){4}\b"),
         "bluetooth_path": re.compile(r"/org/bluez/[^\s\"<>`)}\]]+|dev_[0-9A-Fa-f]{2}(?:_[0-9A-Fa-f]{2}){5}"),
         "ssh_public_key": re.compile(r"\bssh-(?:rsa|ed25519)\s+[A-Za-z0-9+/=]{40,}"),
+        "password_hash": re.compile(r"\$2[aby]\$\d{2}\$[./A-Za-z0-9]{53}|\$(?:argon2id|argon2i|argon2d|5|6)\$[^\s'\"\\]{20,}"),
         "openai_key": re.compile(r"\bsk-(?:proj-|svcacct-)?[A-Za-z0-9_-]{20,}\b"),
         "short_sk_key": re.compile(r"\bsk-[A-Za-z0-9_-]{6,}\b"),
         "anthropic_key": re.compile(r"\bsk-ant-[A-Za-z0-9_-]{20,}\b"),
@@ -102,12 +105,14 @@ def is_countable(name: str, match: str, text: str, start: int, allowed_domains: 
             return False
         if domain.split(".", 1)[0].lower() in {"app", "router", "pytest", "bp", "auth", "admin"}:
             return False
-    if name == "private_user_name":
+    if name in {"private_user_name", "private_user_compound"}:
         # Avoid false positives in JSON report keys such as "rodri": 0.
         if start > 0 and text[start - 1] == '"':
             after = text[end:end + 8]
             if after.startswith('"') and re.match(r'"\s*:', after):
                 return False
+        if match.startswith("[PRIVATE_") or match.startswith("PRIVATE_"):
+            return False
     if name == "api_key_field_value":
         if "[SECRET:" in match or "[REDACTED:" in match:
             return False

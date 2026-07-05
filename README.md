@@ -7,12 +7,12 @@ The goal is to prepare traces for research or dataset contribution while preserv
 ## What It Does
 
 - Preserves raw framework structure instead of normalizing all traces into a shared chat schema.
-- Redacts secrets with deterministic rules for API keys, bearer tokens, private keys, DB URLs, auth headers, environment assignments, cloud credentials, SSH keys, JWTs, and IBAN-like values.
-- Redacts local identifiers such as home paths, shell prompts, Pi encoded cwd folders, emails, IPs/IPv6, MAC/Bluetooth IDs, SSH remotes, GPS/ISO6709 metadata, street-address-shaped content, and contextual phone numbers.
+- Redacts secrets with deterministic rules for API keys, bearer tokens, private keys, DB URLs, auth headers, environment assignments, cloud credentials, SSH keys, JWTs, password hashes, and IBAN-like values.
+- Redacts local identifiers such as home paths, shell prompts, Pi encoded cwd folders, emails, IPs/IPv6, MAC/Bluetooth IDs, SSH remotes, GPS/ISO6709 metadata, street-address-shaped content, contextual phone numbers, private domains containing local identity terms, and identity-like compounds.
 - Redacts **all URLs by default**. You can opt into a small public allowlist with `--allow-public-urls` and add domains with `--allow-domain`.
 - Applies schema-aware redaction for high-risk fields such as `secret`, `token`, `apiKey`, `password`, `authorization`, `share_url`, `encrypted_content`, `thinkingSignature`, and signatures.
 - Excludes OpenCode auth/account/credential/share tables by default.
-- Auto-discovers local identity hints from username, home directory, hostname, git config, and SSH config aliases. User-provided `--private-term` and `--private-domain` remain optional hardening knobs, not requirements.
+- Auto-discovers local identity hints from username, home directory, hostname, git config name/email parts, local timezone city, Pi encoded session path components, and SSH config aliases. User-provided `--private-term` and `--private-domain` remain optional hardening knobs, not requirements.
 - Optionally runs `openai/privacy-filter` for contextual PII spans, auto-using NVIDIA/CUDA when available.
 - Optionally runs Gitleaks as an independent post-export secret scanner and scrubber.
 - Produces a redacted `REDACTION_REPORT.json` and `MANIFEST.json`.
