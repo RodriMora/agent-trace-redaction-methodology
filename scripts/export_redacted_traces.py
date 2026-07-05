@@ -211,7 +211,14 @@ class Redactor:
             (
                 "env_secret_default",
                 re.compile(
-                    r"(?i)([A-Z0-9_]*(?:API[_-]?KEY|TOKEN|SECRET|PASSWORD|PASSWD|PRIVATE[_-]?KEY|ACCESS[_-]?KEY|CREDS[_-]?(?:KEY|IV))[A-Z0-9_]*\s*:\s*\$\{[^}:]+:-)([^}\s]{8,})"
+                    r"(?i)([A-Z0-9_]*(?:API[_-]?KEY|TOKEN|SECRET|PASSWORD|PASSWD|PRIVATE[_-]?KEY|ACCESS[_-]?KEY|CREDS[_-]?(?:KEY|IV))[A-Z0-9_]*\s*:\s*\$\{[^}:]+:-)([^}\s]{3,})"
+                ),
+                r"\1[SECRET:ENV_DEFAULT]",
+            ),
+            (
+                "env_secret_colon_default",
+                re.compile(
+                    r"(?i)(\b[A-Z0-9_]*(?:API[_-]?KEY|TOKEN|SECRET|PASSWORD|PASSWD|PRIVATE[_-]?KEY|ACCESS[_-]?KEY|CREDS[_-]?(?:KEY|IV))[A-Z0-9_]*\s*:-)(?!\[SECRET:|\[REDACTED:)[^\s'\"\\},]{3,}"
                 ),
                 r"\1[SECRET:ENV_DEFAULT]",
             ),

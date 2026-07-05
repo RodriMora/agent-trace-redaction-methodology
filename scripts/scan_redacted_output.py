@@ -116,6 +116,8 @@ def is_countable(name: str, match: str, text: str, start: int, allowed_domains: 
         value = re.split(r"[:=]", match, maxsplit=1)[-1].strip().strip('"\'')
         if value in {"...", "***", "Optional[str]", "str", "string", "None", "null", "''", "\"\""}:
             return False
+        if value.startswith("[SECRET:") or value.startswith("-[SECRET:") or value.startswith("[REDACTED:") or value.startswith("-[REDACTED:"):
+            return False
         if value.startswith("<") or value.startswith("str") or value.strip("*") == "":
             return False
         if re.fullmatch(r"[A-Za-z_$][A-Za-z0-9_.$?]*(?:\s*\|\|\s*'')?", value):
