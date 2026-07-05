@@ -56,6 +56,10 @@ def build_patterns(user_name: str, home_dir: Path, private_domains: list[str]) -
         "encrypted_content_field": re.compile(r'"encrypted_content"\s*:\s*"(?!\[REDACTED:)[^"\\]*(?:\\.[^"\\]*)*"'),
         "thinking_signature_field": re.compile(r'"thinkingSignature"\s*:\s*"(?!\[REDACTED:)[^"\\]*(?:\\.[^"\\]*)*"'),
         "iban": re.compile(r"\b[A-Z]{2}\d{2}[A-Z0-9]{11,30}\b"),
+        "quicktime_location_iso6709": re.compile(r"(?i)com\.apple\.quicktime\.location\.ISO6709\s*:\s*(?!\[PII:GPS_COORDINATES\])[+-]\d{2,3}\.\d{3,}[+-]\d{2,3}\.\d{3,}(?:[+-]\d+(?:\.\d+)?)?/"),
+        "iso6709_coordinates": re.compile(r"(?<![A-Za-z0-9_.])[+-]\d{2,3}\.\d{3,}[+-]\d{2,3}\.\d{3,}(?:[+-]\d+(?:\.\d+)?)?/"),
+        "latlon_coordinates": re.compile(r"\b-?\d{1,2}\.\d{5,}\s*,\s*-?\d{1,3}\.\d{5,}\b"),
+        "street_address": re.compile(r"\b\d{1,6}\s+(?:[A-Z][A-Za-z0-9.'-]+\s+){1,5}(?:Street|St\.?|Avenue|Ave\.?|Road|Rd\.?|Boulevard|Blvd\.?|Drive|Dr\.?|Court|Ct\.?|Place|Pl\.?)\b"),
         "contextual_phone": re.compile(r"(?i)\b(?:phone|tel|mobile|call me|telefono|tel[eé]fono)\s*[:=]?\s*(?:\+?\d[\d .()/-]{7,}\d)"),
     }
     if private_domains:

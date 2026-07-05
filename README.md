@@ -8,7 +8,7 @@ The goal is to prepare traces for research or dataset contribution while preserv
 
 - Preserves raw framework structure instead of normalizing all traces into a shared chat schema.
 - Redacts secrets with deterministic rules for API keys, bearer tokens, private keys, DB URLs, auth headers, environment assignments, cloud credentials, SSH keys, JWTs, and IBAN-like values.
-- Redacts local identifiers such as home paths, shell prompts, Pi encoded cwd folders, emails, IPs, MAC/Bluetooth IDs, SSH remotes, and contextual phone numbers.
+- Redacts local identifiers such as home paths, shell prompts, Pi encoded cwd folders, emails, IPs/IPv6, MAC/Bluetooth IDs, SSH remotes, GPS/ISO6709 metadata, street-address-shaped content, and contextual phone numbers.
 - Redacts **all URLs by default**. You can opt into a small public allowlist with `--allow-public-urls` and add domains with `--allow-domain`.
 - Applies schema-aware redaction for high-risk fields such as `secret`, `token`, `apiKey`, `password`, `authorization`, `share_url`, `encrypted_content`, `thinkingSignature`, and signatures.
 - Excludes OpenCode auth/account/credential/share tables by default.

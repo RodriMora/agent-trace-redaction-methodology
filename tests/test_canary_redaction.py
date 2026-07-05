@@ -34,7 +34,7 @@ class CanaryRedactionTest(unittest.TestCase):
                 {
                     "type": "message",
                     "payload": {
-                        "content": "Call me +1 415 555 1212, share https://opncd.ai/share/abc123XYZ, cwd --home-alice-secret-project--",
+                        "content": "Call me +1 415 555 1212, address 123 Main Street, GPS com.apple.quicktime.location.ISO6709: +40.4064-003.6548+654.064/, share https://opncd.ai/share/abc123XYZ, cwd --home-alice-secret-project--",
                         "apiKey": "not-a-real-secret-but-sensitive-field",
                         "share_url": "https://opncd.ai/share/abc123XYZ",
                     },

@@ -27,10 +27,11 @@ The first pass recursively redacts all string fields and path components with ex
 - Private keys, SSH public keys, JWTs
 - Database URLs and URL basic auth
 - Sensitive environment variable assignments
-- Emails, IPs, MAC/Bluetooth IDs, SSH remotes
+- Emails, IPs/IPv6, MAC/Bluetooth IDs, SSH remotes
 - URLs and OpenCode share URLs
+- GPS coordinates, ISO6709/QuickTime location metadata, and lat/lon pairs
 - Local home paths, generic home paths, shell prompts, and Pi encoded folders
-- Contextual phone numbers and IBAN-like identifiers
+- Contextual phone numbers, street-address-shaped content, and IBAN-like identifiers
 
 Stable placeholders are used for repeated identifiers, such as `[HOME_PATH:0001:...]`, so structure remains analyzable without exposing the source value.
 
@@ -70,7 +71,8 @@ The scanner checks both file contents and output path names for high-risk leftov
 - user-at-host shell prompts and configured username
 - all URLs unless allowlisted
 - OpenCode share URLs
-- IPs, MACs, Bluetooth paths
+- IPs, IPv6, MACs, Bluetooth paths
+- GPS/ISO6709 coordinates, lat/lon pairs, and street-address-shaped content
 - provider key prefixes, private keys, bearer tokens, SSH public keys
 - normal email addresses
 - unredacted API-key fields
